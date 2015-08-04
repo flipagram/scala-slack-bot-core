@@ -1,8 +1,9 @@
 package io.scalac.slack.websockets
 
-import akka.actor.{Actor, Props}
+import akka.actor._
 import akka.io.IO
 import io.scalac.slack._
+import io.scalac.slack.api.Disconnected
 import spray.can.Http
 import spray.can.server.UHttp
 import spray.can.websocket.WebSocketClientWorker
@@ -12,12 +13,14 @@ import spray.http.{HttpHeaders, HttpMethods, HttpRequest}
 /**
  * Created on 28.01.15 19:45
  */
-class WSActor(eventBus: MessageEventBus) extends Actor with WebSocketClientWorker {
+class WSActor(eventBus: MessageEventBus) extends Actor with WebSocketClientWorker with ActorLogging {
 
   override def receive = connect orElse handshaking orElse closeLogic
 
   val out = context.actorOf(Props(classOf[OutgoingMessageProcessor], self, eventBus))
   val in = context.actorOf(Props(classOf[IncomingMessageProcessor], eventBus))
+
+  var lastSender: Option[ActorRef] = None
 
   private def connect(): Receive = {
     case WebSocket.Connect(host, port, resource, ssl) =>
@@ -39,19 +42,26 @@ class WSActor(eventBus: MessageEventBus) extends Actor with WebSocketClientWorke
       // Because all messages from websockets should be read fast
       // If EventProcessor slow down with parsing
       // can be used dispatcher
-      println(s"RECEIVED MESSAGE: ${msg.utf8String} ")
+      log.debug(s"RECEIVED MESSAGE: ${msg.utf8String} ")
       in ! msg.utf8String
 
     case WebSocket.Send(message) => //message to send
-
-      println(s"SENT MESSAGE: $message ")
+      log.debug(s"SENT MESSAGE: $message ")
       send(message)
+    case Terminated(connection) =>
+      context.unwatch(connection)
+      lastSender.foreach(ar => ar ! Disconnected)
+      lastSender = None
     case ignoreThis => // ignore
   }
 
   def send(message: String) = connection ! TextFrame(message)
 
-  def close() = connection ! CloseFrame(StatusCode.NormalClose)
+  def close() = {
+    lastSender = Some(sender())
+    context.watch(connection)
+    connection ! CloseFrame(StatusCode.NormalClose)
+  }
 
   private var request: HttpRequest = null
 

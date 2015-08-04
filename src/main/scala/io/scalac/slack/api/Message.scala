@@ -8,6 +8,7 @@ sealed trait Message
 case object Start extends Message
 case object Stop extends Message
 case object RegisterModules extends Message
+case object Disconnected extends Message
 
 //API CALLS
 case class ApiTest(param: Option[String] = None, error: Option[String] = None) extends Message

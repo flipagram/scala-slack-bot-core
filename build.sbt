@@ -2,7 +2,7 @@ name := "slack-scala-bot-core"
 
 version := "0.2.1"
 
-scalaVersion := "2.10.4"
+scalaVersion := "2.10.5"
 
 organization := "io.scalac"
 
